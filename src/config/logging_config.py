@@ -40,5 +40,5 @@ def configure_logging(log_level: str = "INFO", log_to_file: bool = True) -> None
         )
 
 
-def get_logger(name: str) -> logger:
+def get_logger(name: str):
     return logger.bind(name=name)
