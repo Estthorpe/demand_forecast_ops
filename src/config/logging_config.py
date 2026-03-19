@@ -3,6 +3,7 @@ Centralised logging for demand-forecast-ops"""
 
 import sys
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -40,5 +41,5 @@ def configure_logging(log_level: str = "INFO", log_to_file: bool = True) -> None
         )
 
 
-def get_logger(name: str):
+def get_logger(name: str) -> Any:
     return logger.bind(name=name)
