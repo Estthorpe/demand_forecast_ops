@@ -1,0 +1,20 @@
+# .pre-commit-config.yaml
+# Runs automatically on every git commit.
+# If any hook fails, the commit is blocked.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace

@@ -1,0 +1,17 @@
+# DVC reads this file to detect when parameters change.
+# These values must match the defaults in src/config/settings.py.
+
+data:
+  train_end_date: "2015-06-30"
+  validation_end_date: "2015-07-31"
+  min_store_history_days: 180
+
+model:
+  forecast_horizon_days: 14
+  lgbm_n_estimators: 500
+  lgbm_learning_rate: 0.05
+  lgbm_num_leaves: 31
+
+evaluation:
+  mase_gate_threshold: 1.0
+  smape_gate_threshold: 25.0
