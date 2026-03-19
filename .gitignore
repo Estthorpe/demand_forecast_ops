@@ -1,0 +1,46 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Credentials — most important line in this file
+.env
+*.env
+
+# DVC credentials — contains your DagsHub token in plain text
+.dvc/config.local
+.dvc/tmp/
+.dvc/cache/
+
+# Python bytecode — generated automatically, not source code
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# MLflow local artefacts — we use DagsHub remote instead
+mlruns/
+mlartifacts/
+
+# Data and model files — tracked by DVC, not git
+*.pkl
+*.joblib
+*.parquet
+*.csv
+data/
+
+# VS Code personal settings
+.vscode/
+*.code-workspace
+
+# Windows system files
+Thumbs.db
+Desktop.ini
+
+# Jupyter notebooks — no notebooks in this project
+*.ipynb
+.ipynb_checkpoints/
+
+# Logs
+logs/
+*.log
