@@ -21,6 +21,8 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
+        protected_namespaces=(),
     )
 
     # __________Project Identity______________
@@ -51,6 +53,14 @@ class Settings(BaseSettings):
     lgbm_learning_rate: float = 0.05
     lgbm_num_leaves: int = 31
     lgbm_min_child_samples: int = 20
+
+    # ________Kaggle_________________________
+    kaggle_username: str = ""
+    kaggle_key: str = ""
+
+    # ________DagsHub________________________
+    dagshub_username: str = ""
+    dagshub_token: str = ""
 
     # ________Evaluation gates________________
     # CI pipeline exits with code 1 if these are not met
