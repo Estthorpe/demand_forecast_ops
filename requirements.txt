@@ -148,7 +148,6 @@ python-dotenv==1.0.1
 python-multipart==0.0.22
 python-slugify==8.0.4
 pytz==2024.2
-pywin32==311
 PyYAML==6.0.3
 querystring-parser==1.2.4
 requests==2.32.5
