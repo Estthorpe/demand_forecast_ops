@@ -105,19 +105,19 @@ class LightGBMDirectForecaster:
                 continue
 
             # Point forecast model
-            point_model = lgb.LGBMRegressor(**base_params)
+            point_model = lgb.LGBMRegressor(**base_params)  # type: ignore[arg-type]
             point_model.fit(X, y)
             self._point_models[h] = point_model
 
             # Lower bound model (5th percentile)
-            lower_model = lgb.LGBMRegressor(
+            lower_model = lgb.LGBMRegressor(  # type: ignore[arg-type]
                 **{**base_params, "objective": "quantile", "alpha": 0.05}
             )
             lower_model.fit(X, y)
             self._lower_models[h] = lower_model
 
             # Upper bound model (95th percentile)
-            upper_model = lgb.LGBMRegressor(
+            upper_model = lgb.LGBMRegressor(  # type: ignore[arg-type]
                 **{**base_params, "objective": "quantile", "alpha": 0.95}
             )
             upper_model.fit(X, y)
