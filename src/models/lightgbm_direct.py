@@ -11,6 +11,8 @@ alongside the point forecast model (q=0.5) for each horizon.
 This gives a 90% prediction interval grounded in the data distribution.
 """
 
+from typing import Any
+
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
@@ -105,21 +107,28 @@ class LightGBMDirectForecaster:
                 continue
 
             # Point forecast model
-            point_model = lgb.LGBMRegressor(**base_params)  # type: ignore[arg-type]
+            point_params: dict[str, Any] = dict(base_params)
+            point_model = lgb.LGBMRegressor(**point_params)  # type: ignore[arg-type]
             point_model.fit(X, y)
             self._point_models[h] = point_model
 
             # Lower bound model (5th percentile)
-            lower_model = lgb.LGBMRegressor(  # type: ignore[arg-type]
-                **{**base_params, "objective": "quantile", "alpha": 0.05}
-            )
+            lower_params: dict[str, Any] = {
+                **base_params,
+                "objective": "quantile",
+                "alpha": 0.05,
+            }
+            lower_model = lgb.LGBMRegressor(**lower_params)  # type: ignore[arg-type]
             lower_model.fit(X, y)
             self._lower_models[h] = lower_model
 
             # Upper bound model (95th percentile)
-            upper_model = lgb.LGBMRegressor(  # type: ignore[arg-type]
-                **{**base_params, "objective": "quantile", "alpha": 0.95}
-            )
+            upper_params: dict[str, Any] = {
+                **base_params,
+                "objective": "quantile",
+                "alpha": 0.95,
+            }
+            upper_model = lgb.LGBMRegressor(**upper_params)  # type: ignore[arg-type]
             upper_model.fit(X, y)
             self._upper_models[h] = upper_model
 
