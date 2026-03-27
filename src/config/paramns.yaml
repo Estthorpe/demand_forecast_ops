@@ -8,9 +8,9 @@ data:
 
 model:
   forecast_horizon_days: 14
-  lgbm_n_estimators: 500
-  lgbm_learning_rate: 0.05
-  lgbm_num_leaves: 31
+  lgbm_n_estimators: 50
+  lgbm_learning_rate: 0.1
+  lgbm_num_leaves: 15
 
 evaluation:
   mase_gate_threshold: 1.0

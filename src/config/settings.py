@@ -49,9 +49,9 @@ class Settings(BaseSettings):
     min_store_history_days: int = 180
 
     # ________Model Parameters________________
-    lgbm_n_estimators: int = 500
-    lgbm_learning_rate: float = 0.05
-    lgbm_num_leaves: int = 31
+    lgbm_n_estimators: int = 50
+    lgbm_learning_rate: float = 0.1
+    lgbm_num_leaves: int = 15
     lgbm_min_child_samples: int = 20
 
     # ________Kaggle_________________________
