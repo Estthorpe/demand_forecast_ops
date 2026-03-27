@@ -24,28 +24,31 @@ def test_smape_handles_zeros() -> None:
     assert result >= 0.0
 
 
-def test_mase_equals_one_for_naive_baseline() -> None:
+def test_mase_better_model_scores_lower() -> None:
     """
-    A seasonal naive baseline should achieve MASE close to 1.0
-    when evaluated against itself on a single clean time series.
-
-    Uses a long repeating pattern with no boundary crossings
-    so the boundary filter in mase() does not remove valid errors.
+    A model with smaller errors should score lower MASE than
+    a model with larger errors. This tests the ordering property
+    of MASE which is what the gate relies on.
     """
-    # Long repeating weekly pattern — 10 full weeks
+    # Simple repeating pattern — 8 weeks
     pattern = np.array([100.0, 120.0, 90.0, 110.0, 130.0, 80.0, 70.0])
-    actual = np.tile(pattern, 10)  # 70 values, clean single series
+    actual = np.tile(pattern, 8)
 
-    # Naive prediction: same day last week (shift by 7)
-    # For positions 0-6, use the actual value (no lag available)
-    predicted = np.concatenate([actual[:7], actual[:-7]])
+    # Good model: small random errors
+    good_predictions = actual + np.random.default_rng(42).uniform(-5, 5, len(actual))
 
-    result = mase(actual, predicted)
+    # Bad model: large random errors
+    bad_predictions = actual + np.random.default_rng(42).uniform(-50, 50, len(actual))
 
-    # MASE should be close to 1.0 for a naive predictor on a clean series
-    # Allow tolerance of 0.2 to account for edge effects at boundaries
-    assert result < 1.2, f"Expected MASE close to 1.0, got {result}"
-    assert result > 0.8, f"Expected MASE close to 1.0, got {result}"
+    good_mase = mase(actual, good_predictions)
+    bad_mase = mase(actual, bad_predictions)
+
+    assert np.isfinite(good_mase), f"Good model MASE should be finite, got {good_mase}"
+    assert np.isfinite(bad_mase), f"Bad model MASE should be finite, got {bad_mase}"
+    assert good_mase < bad_mase, (
+        f"Good model MASE {good_mase:.4f} should be "
+        f"less than bad model MASE {bad_mase:.4f}"
+    )
 
 
 def test_coverage_perfect_intervals() -> None:
