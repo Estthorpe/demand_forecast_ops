@@ -40,19 +40,16 @@ def mase(
     Mean Absolute Scaled Error.
 
     Compares model MAE against a naive seasonal baseline.
-    The naive baseline predicts: ŷ_t = y_{t - seasonal_period}
+    MASE < 1.0: model beats naive baseline.
+    MASE >= 1.0: model does not beat naive baseline.
 
-    MASE < 1.0: model beats naive baseline — acceptable for deployment
-    MASE = 1.0: model equals naive baseline — marginal
-    MASE > 1.0: model is worse than naive — reject, do not deploy
+    Args:
+        actual:          Array of actual values (single time series).
+        predicted:       Array of predicted values.
+        seasonal_period: Naive baseline lag period.
 
-    Implementation note:
-    When actual contains rows from multiple stores concatenated,
-    naive differences at store boundaries are meaningless.
-    We use only the interior rows (skipping the first seasonal_period
-    rows) for the naive MAE computation to avoid cross-store
-    contamination. This produces a conservative but correct estimate.
-
+    Returns:
+        MASE value. Below 1.0 is better than naive.
     """
     actual = np.array(actual, dtype=float)
     predicted = np.array(predicted, dtype=float)
@@ -61,23 +58,12 @@ def mase(
         return float("inf")
 
     model_mae = np.mean(np.abs(actual - predicted))
+    naive_errors = np.abs(actual[seasonal_period:] - actual[:-seasonal_period])
+    naive_mae = np.mean(naive_errors)
 
-    # Compute naive errors only on interior rows
-    interior_actual = actual[seasonal_period:]
-    interior_naive = actual[:-seasonal_period]
-    naive_errors = np.abs(interior_actual - interior_naive)
-
-    # Filter out suspiciously large differences that indicate
-    # store boundary crossings — values > 10x the median are excluded
-    median_error = np.median(naive_errors)
-    if median_error > 0:
-        boundary_mask = naive_errors <= (10 * median_error)
-        naive_errors = naive_errors[boundary_mask]
-
-    if len(naive_errors) == 0 or np.mean(naive_errors) == 0:
+    if naive_mae == 0:
         return float("inf")
 
-    naive_mae = np.mean(naive_errors)
     return float(model_mae / naive_mae)
 
 

@@ -27,28 +27,45 @@ def test_smape_handles_zeros() -> None:
 def test_mase_better_model_scores_lower() -> None:
     """
     A model with smaller errors should score lower MASE than
-    a model with larger errors. This tests the ordering property
-    of MASE which is what the gate relies on.
+    a model with larger errors.
     """
-    # Simple repeating pattern — 8 weeks
-    pattern = np.array([100.0, 120.0, 90.0, 110.0, 130.0, 80.0, 70.0])
-    actual = np.tile(pattern, 8)
+    actual = np.array(
+        [
+            100.0,
+            120.0,
+            90.0,
+            110.0,
+            130.0,
+            80.0,
+            70.0,
+            100.0,
+            120.0,
+            90.0,
+            110.0,
+            130.0,
+            80.0,
+            70.0,
+            100.0,
+            120.0,
+            90.0,
+            110.0,
+            130.0,
+            80.0,
+            70.0,
+        ]
+    )
 
-    # Good model: small random errors
-    good_predictions = actual + np.random.default_rng(42).uniform(-5, 5, len(actual))
-
-    # Bad model: large random errors
-    bad_predictions = actual + np.random.default_rng(42).uniform(-50, 50, len(actual))
+    good_predictions = actual + 5.0  # small constant error
+    bad_predictions = actual + 50.0  # large constant error
 
     good_mase = mase(actual, good_predictions)
     bad_mase = mase(actual, bad_predictions)
 
-    assert np.isfinite(good_mase), f"Good model MASE should be finite, got {good_mase}"
-    assert np.isfinite(bad_mase), f"Bad model MASE should be finite, got {bad_mase}"
-    assert good_mase < bad_mase, (
-        f"Good model MASE {good_mase:.4f} should be "
-        f"less than bad model MASE {bad_mase:.4f}"
-    )
+    assert np.isfinite(good_mase), "Good model MASE should be finite"
+    assert np.isfinite(bad_mase), "Bad model MASE should be finite"
+    assert (
+        good_mase < bad_mase
+    ), f"Good model MASE {good_mase} should be less than bad model MASE {bad_mase}"
 
 
 def test_coverage_perfect_intervals() -> None:
