@@ -154,8 +154,9 @@ class LightGBMDirectForecaster:
             raise RuntimeError("Call fit() before predict()")
 
         features_df = features_df.copy()
-        features_df["date"] = pd.to_datetime(features_df["date"])
-        features_df = features_df.sort_values(["store", "date"])
+        if "date" in features_df.columns:
+            features_df["date"] = pd.to_datetime(features_df["date"])
+            features_df = features_df.sort_values(["store", "date"])
 
         X = features_df[self._feature_columns]
 
