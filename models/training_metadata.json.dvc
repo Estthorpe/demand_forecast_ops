@@ -1,0 +1,5 @@
+outs:
+- md5: aa1c88adfdad9fb38c87b486ffe36982
+  size: 240
+  hash: md5
+  path: training_metadata.json

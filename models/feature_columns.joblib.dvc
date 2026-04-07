@@ -1,0 +1,5 @@
+outs:
+- md5: 103cd3d369b11c29765658407c451928
+  size: 454
+  hash: md5
+  path: feature_columns.joblib

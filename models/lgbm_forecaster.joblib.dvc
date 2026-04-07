@@ -1,0 +1,5 @@
+outs:
+- md5: 4c13ad47169b1ff3aa3dc83b35ea28fb
+  size: 3324317
+  hash: md5
+  path: lgbm_forecaster.joblib
