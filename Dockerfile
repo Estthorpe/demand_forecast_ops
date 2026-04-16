@@ -20,7 +20,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 COPY --from=builder /root/.local /root/.local
 
 COPY src/ ./src/
-COPY configs/ ./configs/
 COPY pyproject.toml .
 COPY .dvc/ ./.dvc/
 
