@@ -1,1 +1,14 @@
-#!/bin/bashset -eecho "Configuring DVC credentials..."dvc remote modify origin --local auth basicdvc remote modify origin --local user "${DAGSHUB_USERNAME}"dvc remote modify origin --local password "${DAGSHUB_TOKEN}"echo "Pulling model artefacts..."dvc pullecho "Starting server on port ${PORT:-8000}..."exec uvicorn src.serving.app:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
+#!/bin/bash
+set -e
+
+echo "Configuring DVC credentials..."
+dvc remote modify origin --local auth basic
+dvc remote modify origin --local user "${DAGSHUB_USERNAME}"
+dvc remote modify origin --local password "${DAGSHUB_TOKEN}"
+
+echo "Pulling model artefacts..."
+dvc pull
+
+echo "Starting server on port ${PORT:-8000}..."
+
+exec uvicorn src.serving.app:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
