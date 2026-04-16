@@ -32,8 +32,4 @@ RUN sed -i 's/\r//' start.sh && chmod +x start.sh
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-CMD dvc remote modify origin --local auth basic \
-    && dvc remote modify origin --local user "${DAGSHUB_USERNAME}" \
-    && dvc remote modify origin --local password "${DAGSHUB_TOKEN}" \
-    && dvc pull \
-    && uvicorn src.serving.app:app --host 0.0.0.0 --port "${PORT:-8000}" --workers 1
+CMD ["uvicorn", "src.serving.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

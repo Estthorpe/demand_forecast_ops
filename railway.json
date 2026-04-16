@@ -5,7 +5,6 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "uvicorn src.serving.app:app --host 0.0.0.0 --port $PORT",
-    "restartPolicyType": "ON_FAILURE"
+    "startCommand": "dvc remote modify origin --local auth basic && dvc remote modify origin --local user $DAGSHUB_USERNAME && dvc remote modify origin --local password $DAGSHUB_TOKEN && dvc pull && uvicorn src.serving.app:app --host 0.0.0.0 --port $PORT --workers 1"
   }
 }
