@@ -9,5 +9,6 @@ dvc remote modify origin --local password "${DAGSHUB_TOKEN}"
 echo "Pulling model artefacts..."
 dvc pull
 
-echo "Starting server..."
-exec uvicorn src.serving.app:app --host 0.0.0.0 --port 8000 --workers 1
+echo "Starting server on port ${PORT:-8000}..."
+
+exec uvicorn src.serving.app:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
