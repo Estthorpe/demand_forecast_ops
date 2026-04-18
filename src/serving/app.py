@@ -26,7 +26,7 @@ from typing import Any
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -139,6 +139,13 @@ async def health() -> HealthResponse:
         status="ok",
         version=settings.project_version,
     )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard() -> HTMLResponse:
+    """Serve the operations dashboard."""
+    dashboard_path = Path(__file__).parent / "dashboard.html"
+    return HTMLResponse(content=dashboard_path.read_text())
 
 
 @app.get("/ready", response_model=ReadyResponse)

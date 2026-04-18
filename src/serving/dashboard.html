@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>demand-forecast-ops</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --bg-panel: #111111;
+    --bg-card: #161616;
+    --border: #252525;
+    --border-bright: #333333;
+    --text: #e8e8e8;
+    --text-dim: #666666;
+    --text-mid: #999999;
+    --accent: #00d4aa;
+    --accent-dim: rgba(0, 212, 170, 0.12);
+    --accent-glow: rgba(0, 212, 170, 0.3);
+    --warn: #f0a500;
+    --warn-dim: rgba(240, 165, 0, 0.12);
+    --danger: #e05252;
+    --danger-dim: rgba(224, 82, 82, 0.12);
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .logo span { color: var(--text-dim); font-weight: 300; }
+
+  .header-status { display: flex; align-items: center; gap: 20px; }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+
+  .status-dot.online {
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    animation: pulse 2s infinite;
+  }
+
+  .status-dot.offline { background: var(--danger); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    min-height: calc(100vh - 52px);
+  }
+
+  nav {
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+    position: sticky;
+    top: 52px;
+    height: calc(100vh - 52px);
+    overflow-y: auto;
+  }
+
+  .nav-section { padding: 0 16px; margin-bottom: 24px; }
+
+  .nav-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0 8px;
+    margin-bottom: 6px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--text-mid);
+    font-size: 13px;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+  }
+
+  .nav-item:hover {
+    background: var(--bg-card);
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .nav-item.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-color: rgba(0,212,170,0.2);
+  }
+
+  .nav-icon { font-size: 14px; width: 16px; text-align: center; }
+
+  main { padding: 24px; overflow-y: auto; }
+
+  .section { display: none; }
+
+  .section.active {
+    display: block;
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .page-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .page-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .card-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title-accent { color: var(--accent); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+  }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.warn { color: var(--warn); }
+  .stat-value.danger { color: var(--danger); }
+  .stat-sub { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+
+  .form-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+
+  label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  input, select {
+    background: var(--bg);
+    border: 1px solid var(--border-bright);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 3px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  input:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+  }
+
+  select option { background: var(--bg-panel); }
+
+  .btn {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    padding: 9px 20px;
+    border-radius: 3px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+
+  .btn-primary { background: var(--accent); color: #000; }
+
+  .btn-primary:hover {
+    background: #00f0c0;
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+
+  .btn-primary:disabled {
+    background: var(--border-bright);
+    color: var(--text-dim);
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-mid);
+    border: 1px solid var(--border-bright);
+  }
+
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  .chart-container { position: relative; height: 240px; width: 100%; }
+  canvas { width: 100% !important; }
+
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+
+  th {
+    text-align: left;
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+  }
+
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .td-accent { color: var(--accent); }
+  .td-warn { color: var(--warn); }
+  .td-dim { color: var(--text-dim); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+
+  .badge-ok { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,212,170,0.2); }
+  .badge-warn { background: var(--warn-dim); color: var(--warn); border: 1px solid rgba(240,165,0,0.2); }
+  .badge-danger { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(224,82,82,0.2); }
+  .badge-dim { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); }
+
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 20px 0;
+  }
+
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .narrative-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 16px 20px;
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    border-radius: 0 3px 3px 0;
+    margin-top: 4px;
+  }
+
+  .narrative-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 10px;
+    letter-spacing: 0.05em;
+  }
+
+  .tool-call {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .tool-call-name { color: var(--accent); font-weight: 500; min-width: 160px; }
+  .tool-call-status { font-size: 10px; }
+  .tool-call-detail { color: var(--text-dim); flex: 1; }
+
+  .reasoning-item {
+    display: flex;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-mid);
+  }
+
+  .reasoning-item:last-child { border-bottom: none; }
+
+  .reasoning-num {
+    font-family: var(--mono);
+    color: var(--accent);
+    font-size: 10px;
+    min-width: 20px;
+    padding-top: 2px;
+  }
+
+  .error-box {
+    background: var(--danger-dim);
+    border: 1px solid rgba(224,82,82,0.3);
+    border-radius: 3px;
+    padding: 12px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--danger);
+  }
+
+  .warn-box {
+    background: var(--warn-dim);
+    border: 1px solid rgba(240,165,0,0.3);
+    border-radius: 3px;
+    padding: 12px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--warn);
+    margin-bottom: 16px;
+  }
+
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-mid);
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.6;
+  }
+
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+  .empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .plan-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .plan-id { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+
+  .replenishment-hero {
+    text-align: center;
+    padding: 28px;
+    background: var(--accent-dim);
+    border: 1px solid rgba(0,212,170,0.2);
+    border-radius: 4px;
+    margin-bottom: 16px;
+  }
+
+  .replenishment-hero .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .replenishment-hero .value {
+    font-family: var(--mono);
+    font-size: 42px;
+    font-weight: 600;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .replenishment-hero .unit {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">demand<span>-</span>forecast<span>-</span>ops <span>// P5</span></div>
+  <div class="header-status">
+    <div class="status-pill">
+      <div class="status-dot" id="api-status-dot"></div>
+      <span id="api-status-text">CHECKING</span>
+    </div>
+    <div class="status-pill">
+      <span id="header-time" style="font-family: var(--mono); font-size: 11px;"></span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav>
+    <div class="nav-section">
+      <div class="nav-label">System</div>
+      <div class="nav-item active" onclick="showSection('overview', this)">
+        <span class="nav-icon">◈</span> Overview
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Core</div>
+      <div class="nav-item" onclick="showSection('forecast', this)">
+        <span class="nav-icon">▸</span> Forecast
+      </div>
+      <div class="nav-item" onclick="showSection('monitoring', this)">
+        <span class="nav-icon">◎</span> Monitoring
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Intelligence</div>
+      <div class="nav-item" onclick="showSection('narrative', this)">
+        <span class="nav-icon">◇</span> Narrative
+      </div>
+      <div class="nav-item" onclick="showSection('agent', this)">
+        <span class="nav-icon">⬡</span> Agent
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Ops</div>
+      <div class="nav-item" onclick="showSection('metrics', this)">
+        <span class="nav-icon">▣</span> Metrics
+      </div>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- Overview -->
+    <div class="section active" id="section-overview">
+      <div class="page-title">System Overview</div>
+      <div class="grid-4">
+        <div class="stat-card">
+          <div class="stat-label">Model Status</div>
+          <div class="stat-value accent" id="ov-model-status">—</div>
+          <div class="stat-sub" id="ov-model-version">checking...</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Requests</div>
+          <div class="stat-value" id="ov-requests">—</div>
+          <div class="stat-sub">forecast calls</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Drift Status</div>
+          <div class="stat-value" id="ov-drift">—</div>
+          <div class="stat-sub" id="ov-drift-sub">not checked</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Retrain Flag</div>
+          <div class="stat-value" id="ov-retrain">—</div>
+          <div class="stat-sub" id="ov-retrain-sub">not evaluated</div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">Pipeline Stages</div>
+          <table>
+            <thead><tr><th>Stage</th><th>Component</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td class="td-dim">1 — Template</td><td>Repo scaffold, CI, Docker</td><td><span class="badge badge-ok">COMPLETE</span></td></tr>
+              <tr><td class="td-dim">2 — Ingestion</td><td>Rossmann data contracts</td><td><span class="badge badge-ok">COMPLETE</span></td></tr>
+              <tr><td class="td-dim">3 — Evaluation</td><td>Walk-forward validation</td><td><span class="badge badge-ok">COMPLETE</span></td></tr>
+              <tr><td class="td-dim">4 — Serving</td><td>FastAPI inference API</td><td><span class="badge badge-ok">COMPLETE</span></td></tr>
+              <tr><td class="td-dim">5 — Monitoring</td><td>PSI drift + trigger logic</td><td><span class="badge badge-ok">COMPLETE</span></td></tr>
+              <tr><td class="td-dim">6 — GenAI</td><td>Narrative generator</td><td><span class="badge badge-ok">COMPLETE</span></td></tr>
+              <tr><td class="td-dim">7 — Agentic</td><td>Replenishment agent</td><td><span class="badge badge-ok">COMPLETE</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-title">Model Performance</div>
+          <div class="grid-2" style="margin-bottom:16px;">
+            <div>
+              <div class="stat-label">LightGBM MASE</div>
+              <div class="stat-value accent" style="font-size:28px;">1.0338</div>
+              <div class="stat-sub">direct multi-step forecaster</div>
+            </div>
+            <div>
+              <div class="stat-label">vs Baseline</div>
+              <div class="stat-value" style="font-size:28px;color:var(--warn);">−20.2%</div>
+              <div class="stat-sub">seasonal naive MASE: 1.2956</div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);line-height:1.8;">
+            <div>Dataset &nbsp;&nbsp;· Rossmann Store Sales</div>
+            <div>Records &nbsp;· 982,644 rows · 1,115 stores</div>
+            <div>Period &nbsp;&nbsp;· 2013–2015</div>
+            <div>Eval &nbsp;&nbsp;&nbsp;&nbsp;· Walk-forward expanding window</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Endpoint Inventory</div>
+        <table>
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Purpose</th><th>Stage</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-ok">GET</span></td><td>/health</td><td>Liveness check</td><td class="td-dim">4</td></tr>
+            <tr><td><span class="badge badge-ok">GET</span></td><td>/ready</td><td>Model loaded?</td><td class="td-dim">4</td></tr>
+            <tr><td><span class="badge badge-warn">POST</span></td><td>/forecast</td><td>Demand forecast + 90% intervals</td><td class="td-dim">4</td></tr>
+            <tr><td><span class="badge badge-ok">GET</span></td><td>/metrics</td><td>Prometheus-compatible metrics</td><td class="td-dim">5</td></tr>
+            <tr><td><span class="badge badge-ok">GET</span></td><td>/monitoring/drift</td><td>PSI drift report</td><td class="td-dim">5</td></tr>
+            <tr><td><span class="badge badge-ok">GET</span></td><td>/monitoring/trigger</td><td>Retraining trigger decision</td><td class="td-dim">5</td></tr>
+            <tr><td><span class="badge badge-warn">POST</span></td><td>/genai/narrative</td><td>LLM stakeholder narrative</td><td class="td-dim">6</td></tr>
+            <tr><td><span class="badge badge-warn">POST</span></td><td>/agent/run</td><td>Replenishment agent workflow</td><td class="td-dim">7</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Forecast -->
+    <div class="section" id="section-forecast">
+      <div class="page-title">Demand Forecast</div>
+      <div class="card">
+        <div class="card-title">Forecast Parameters</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Store ID</label>
+            <input type="number" id="fc-store" value="1" min="1" max="1115" style="width:100px;">
+          </div>
+          <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="fc-date" value="2015-07-01">
+          </div>
+          <div class="form-group">
+            <label>Horizon (days)</label>
+            <select id="fc-horizon" style="width:120px;">
+              <option value="7" selected>7 days</option>
+              <option value="14">14 days</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Promo</label>
+            <select id="fc-promo" style="width:100px;">
+              <option value="0">None</option>
+              <option value="1">Active</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="runForecast()" id="fc-btn">Run Forecast</button>
+        </div>
+      </div>
+      <div id="fc-loading" style="display:none;"><div class="loading"><div class="spinner"></div> Generating forecast...</div></div>
+      <div id="fc-error" style="display:none;"></div>
+      <div id="fc-results" style="display:none;">
+        <div class="grid-3">
+          <div class="stat-card">
+            <div class="stat-label">Total Forecast</div>
+            <div class="stat-value accent" id="fc-total">—</div>
+            <div class="stat-sub">units over horizon</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Mean Daily</div>
+            <div class="stat-value" id="fc-mean">—</div>
+            <div class="stat-sub">units / day</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Model Version</div>
+            <div class="stat-value" id="fc-model-ver" style="font-size:16px;padding-top:4px;">—</div>
+            <div class="stat-sub">trained artefact</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Forecast Chart <span class="card-title-accent">point + 90% interval</span></div>
+          <div class="chart-container"><canvas id="fc-chart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Daily Breakdown</div>
+          <table>
+            <thead><tr><th>Date</th><th>Day</th><th>Point Forecast</th><th>Lower 90%</th><th>Upper 90%</th></tr></thead>
+            <tbody id="fc-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monitoring -->
+    <div class="section" id="section-monitoring">
+      <div class="page-title">Monitoring & Drift</div>
+      <div id="mon-loading" style="display:none;"><div class="loading"><div class="spinner"></div> Loading monitoring data...</div></div>
+      <div id="mon-content">
+        <div class="grid-3">
+          <div class="stat-card">
+            <div class="stat-label">Drift Status</div>
+            <div class="stat-value" id="mon-drift-status">—</div>
+            <div class="stat-sub" id="mon-drift-sub">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Max PSI</div>
+            <div class="stat-value" id="mon-max-psi">—</div>
+            <div class="stat-sub">threshold: 0.20</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Retrain Flag</div>
+            <div class="stat-value" id="mon-retrain">—</div>
+            <div class="stat-sub" id="mon-retrain-sub">—</div>
+          </div>
+        </div>
+        <div class="card" id="mon-trigger-card">
+          <div class="card-title">Retraining Trigger Decision</div>
+          <div id="mon-trigger-content"><div class="empty">No trigger data yet. Run a forecast first, then refresh.</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">PSI Thresholds</div>
+          <table>
+            <thead><tr><th>PSI Range</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td class="td-accent">PSI &lt; 0.10</td><td><span class="badge badge-ok">STABLE</span></td><td class="td-dim">No action required</td></tr>
+              <tr><td style="color:var(--warn);">0.10 ≤ PSI &lt; 0.20</td><td><span class="badge badge-warn">MODERATE</span></td><td class="td-dim">Monitor closely</td></tr>
+              <tr><td style="color:var(--danger);">PSI ≥ 0.20</td><td><span class="badge badge-danger">DRIFTED</span></td><td class="td-dim">Trigger retraining</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <button class="btn btn-ghost" onclick="loadMonitoring()" style="margin-top:8px;">↻ Refresh</button>
+    </div>
+
+    <!-- Narrative -->
+    <div class="section" id="section-narrative">
+      <div class="page-title">GenAI Narrative Generator</div>
+      <div class="card">
+        <div class="card-title">Narrative Parameters</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Store ID</label>
+            <input type="number" id="nar-store" value="1" min="1" max="1115" style="width:100px;">
+          </div>
+          <div class="form-group">
+            <label>Horizon (days)</label>
+            <input type="number" id="nar-horizon" value="7" min="1" max="14" style="width:100px;">
+          </div>
+          <div class="form-group">
+            <label>Mean Forecast</label>
+            <input type="number" id="nar-mean" value="4823" style="width:120px;">
+          </div>
+          <div class="form-group">
+            <label>Template</label>
+            <select id="nar-template" style="width:140px;">
+              <option value="combined" selected>Combined</option>
+              <option value="forecast">Forecast Only</option>
+              <option value="monitoring">Monitoring Only</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Drift Detected</label>
+            <select id="nar-drift" style="width:100px;">
+              <option value="false" selected>No</option>
+              <option value="true">Yes</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Retrain</label>
+            <select id="nar-retrain" style="width:100px;">
+              <option value="false" selected>No</option>
+              <option value="true">Yes</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="runNarrative()" id="nar-btn">Generate</button>
+        </div>
+      </div>
+      <div id="nar-loading" style="display:none;"><div class="loading"><div class="spinner"></div> Calling Anthropic API...</div></div>
+      <div id="nar-error" style="display:none;"></div>
+      <div id="nar-results" style="display:none;">
+        <div class="card">
+          <div class="card-title">Generated Narrative <span id="nar-model-badge"></span></div>
+          <div class="narrative-box" id="nar-text"></div>
+          <div class="narrative-meta" id="nar-meta"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Generation Metadata</div>
+          <div id="nar-meta-detail" class="code-block"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agent -->
+    <div class="section" id="section-agent">
+      <div class="page-title">Replenishment Agent</div>
+      <div class="card">
+        <div class="card-title">Agent Parameters</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Store ID</label>
+            <input type="number" id="ag-store" value="1" min="1" max="1115" style="width:100px;">
+          </div>
+          <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="ag-date" value="2015-07-01">
+          </div>
+          <div class="form-group">
+            <label>Horizon (days)</label>
+            <select id="ag-horizon" style="width:120px;">
+              <option value="7" selected>7 days</option>
+              <option value="14">14 days</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Promo</label>
+            <select id="ag-promo" style="width:100px;">
+              <option value="0">None</option>
+              <option value="1">Active</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="runAgent()" id="ag-btn">Run Agent</button>
+        </div>
+      </div>
+      <div id="ag-loading" style="display:none;"><div class="loading"><div class="spinner"></div> Agent orchestrating workflow...</div></div>
+      <div id="ag-error" style="display:none;"></div>
+      <div id="ag-results" style="display:none;">
+        <div class="plan-header">
+          <div>
+            <div class="stat-label">Plan ID</div>
+            <div class="plan-id" id="ag-plan-id">—</div>
+          </div>
+          <div id="ag-status-badge"></div>
+        </div>
+        <div class="replenishment-hero">
+          <div class="label">Recommended Replenishment</div>
+          <div class="value" id="ag-replenishment">—</div>
+          <div class="unit">units</div>
+        </div>
+        <div class="grid-3">
+          <div class="stat-card">
+            <div class="stat-label">Total Forecast</div>
+            <div class="stat-value" id="ag-total">—</div>
+            <div class="stat-sub">units over horizon</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Mean Daily</div>
+            <div class="stat-value" id="ag-daily">—</div>
+            <div class="stat-sub">units / day</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Monitoring</div>
+            <div class="stat-value" id="ag-monitoring">—</div>
+            <div class="stat-sub" id="ag-monitoring-sub">—</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Stakeholder Narrative</div>
+          <div class="narrative-box" id="ag-narrative"></div>
+          <div class="narrative-meta" id="ag-narrative-meta"></div>
+        </div>
+        <div id="ag-warnings-block" style="display:none;">
+          <div class="warn-box" id="ag-warnings"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Agent Reasoning Chain</div>
+          <div id="ag-reasoning"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Tool Call Audit Log</div>
+          <div id="ag-tool-calls"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="section" id="section-metrics">
+      <div class="page-title">System Metrics</div>
+      <div id="met-loading" style="display:none;"><div class="loading"><div class="spinner"></div> Fetching metrics...</div></div>
+      <div class="grid-4">
+        <div class="stat-card">
+          <div class="stat-label">Requests</div>
+          <div class="stat-value" id="met-requests">—</div>
+          <div class="stat-sub">total forecast calls</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Errors</div>
+          <div class="stat-value" id="met-errors">—</div>
+          <div class="stat-sub" id="met-error-rate">error rate: —</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg Latency</div>
+          <div class="stat-value" id="met-latency">—</div>
+          <div class="stat-sub">milliseconds</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Mean Forecast</div>
+          <div class="stat-value" id="met-mean-forecast">—</div>
+          <div class="stat-sub">recent predictions</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Raw Prometheus Output</div>
+        <div class="code-block" id="met-raw">Loading...</div>
+      </div>
+      <button class="btn btn-ghost" onclick="loadMetrics()" style="margin-top:8px;">↻ Refresh</button>
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+  const BASE = '';
+  let fcChart = null;
+
+  function updateClock() {
+    document.getElementById('header-time').textContent =
+      new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  function showSection(name, el) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('section-' + name).classList.add('active');
+    el.classList.add('active');
+    if (name === 'monitoring') loadMonitoring();
+    if (name === 'metrics') loadMetrics();
+  }
+
+  async function checkHealth() {
+    try {
+      const r = await fetch(BASE + '/ready');
+      const data = await r.json();
+      const dot = document.getElementById('api-status-dot');
+      const txt = document.getElementById('api-status-text');
+      if (data.model_loaded) {
+        dot.className = 'status-dot online';
+        txt.textContent = 'MODEL READY';
+        document.getElementById('ov-model-status').textContent = 'READY';
+        document.getElementById('ov-model-version').textContent = 'model loaded';
+      } else {
+        dot.className = 'status-dot offline';
+        txt.textContent = 'NOT READY';
+      }
+    } catch (e) {
+      document.getElementById('api-status-dot').className = 'status-dot offline';
+      document.getElementById('api-status-text').textContent = 'OFFLINE';
+      document.getElementById('ov-model-status').textContent = 'OFFLINE';
+      document.getElementById('ov-model-status').className = 'stat-value danger';
+    }
+  }
+
+  async function loadOverviewMetrics() {
+    try {
+      const r = await fetch(BASE + '/metrics');
+      const text = await r.text();
+      const lines = text.split('\n');
+      const get = (name) => {
+        const line = lines.find(l => l.startsWith(name + ' '));
+        return line ? parseFloat(line.split(' ')[1]) : null;
+      };
+      const requests = get('forecast_requests_total');
+      const drift = get('drift_detected');
+      const retrain = get('retraining_flag');
+      if (requests !== null) document.getElementById('ov-requests').textContent = requests.toFixed(0);
+      if (drift !== null) {
+        const el = document.getElementById('ov-drift');
+        const sub = document.getElementById('ov-drift-sub');
+        if (drift === 1) {
+          el.textContent = 'DRIFT'; el.className = 'stat-value danger';
+          sub.textContent = 'PSI ≥ 0.20 detected';
+        } else {
+          el.textContent = 'STABLE'; el.className = 'stat-value accent';
+          sub.textContent = 'no significant drift';
+        }
+      }
+      if (retrain !== null) {
+        const el = document.getElementById('ov-retrain');
+        const sub = document.getElementById('ov-retrain-sub');
+        if (retrain === 1) {
+          el.textContent = 'YES'; el.className = 'stat-value warn';
+          sub.textContent = 'retraining recommended';
+        } else {
+          el.textContent = 'NO'; el.className = 'stat-value accent';
+          sub.textContent = 'model is healthy';
+        }
+      }
+    } catch (e) {}
+  }
+
+  async function runForecast() {
+    const btn = document.getElementById('fc-btn');
+    btn.disabled = true; btn.textContent = 'Running...';
+    document.getElementById('fc-loading').style.display = 'block';
+    document.getElementById('fc-error').style.display = 'none';
+    document.getElementById('fc-results').style.display = 'none';
+    try {
+      const r = await fetch(BASE + '/forecast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store_id: parseInt(document.getElementById('fc-store').value),
+          start_date: document.getElementById('fc-date').value,
+          horizon_days: parseInt(document.getElementById('fc-horizon').value),
+          promo: parseInt(document.getElementById('fc-promo').value),
+          school_holiday: 0,
+          state_holiday: '0'
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Forecast failed');
+      renderForecast(data);
+    } catch (e) {
+      const el = document.getElementById('fc-error');
+      el.style.display = 'block';
+      el.innerHTML = `<div class="error-box">Error: ${e.message}</div>`;
+    } finally {
+      document.getElementById('fc-loading').style.display = 'none';
+      btn.disabled = false; btn.textContent = 'Run Forecast';
+    }
+  }
+
+  function renderForecast(data) {
+    const forecasts = data.forecasts;
+    const total = forecasts.reduce((s, f) => s + f.point_forecast, 0);
+    const mean = total / forecasts.length;
+    document.getElementById('fc-total').textContent = Math.round(total).toLocaleString();
+    document.getElementById('fc-mean').textContent = Math.round(mean).toLocaleString();
+    document.getElementById('fc-model-ver').textContent = data.model_version || '—';
+    const labels = forecasts.map(f => f.forecast_date.substring(5));
+    const points = forecasts.map(f => f.point_forecast);
+    const lower = forecasts.map(f => f.lower_90);
+    const upper = forecasts.map(f => f.upper_90);
+    const ctx = document.getElementById('fc-chart').getContext('2d');
+    if (fcChart) fcChart.destroy();
+    fcChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Upper 90%', data: upper, borderColor: 'transparent', backgroundColor: 'rgba(0,212,170,0.08)', fill: '+1', pointRadius: 0, tension: 0.3 },
+          { label: 'Lower 90%', data: lower, borderColor: 'transparent', backgroundColor: 'rgba(0,212,170,0.08)', fill: false, pointRadius: 0, tension: 0.3 },
+          { label: 'Point Forecast', data: points, borderColor: '#00d4aa', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#00d4aa', tension: 0.3, fill: false }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#666', font: { family: 'IBM Plex Mono', size: 11 } } } },
+        scales: {
+          x: { grid: { color: '#1a1a1a' }, ticks: { color: '#666', font: { family: 'IBM Plex Mono', size: 11 } } },
+          y: { grid: { color: '#1a1a1a' }, ticks: { color: '#666', font: { family: 'IBM Plex Mono', size: 11 } } }
+        }
+      }
+    });
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const tbody = document.getElementById('fc-table-body');
+    tbody.innerHTML = forecasts.map(f => {
+      const d = new Date(f.forecast_date);
+      return `<tr>
+        <td class="td-accent">${f.forecast_date}</td>
+        <td class="td-dim">${days[d.getDay()]}</td>
+        <td>${Math.round(f.point_forecast).toLocaleString()}</td>
+        <td class="td-dim">${Math.round(f.lower_90).toLocaleString()}</td>
+        <td class="td-dim">${Math.round(f.upper_90).toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('fc-results').style.display = 'block';
+  }
+
+  async function loadMonitoring() {
+    document.getElementById('mon-loading').style.display = 'block';
+    try {
+      const r = await fetch(BASE + '/monitoring/trigger');
+      const trigger = await r.json();
+      renderMonitoring(trigger);
+    } catch(e) { console.error(e); }
+    finally { document.getElementById('mon-loading').style.display = 'none'; }
+  }
+
+  function renderMonitoring(trigger) {
+    if (trigger.status === 'no_data') {
+      document.getElementById('mon-drift-status').textContent = '—';
+      document.getElementById('mon-max-psi').textContent = '—';
+      document.getElementById('mon-retrain').textContent = '—';
+      document.getElementById('mon-trigger-content').innerHTML =
+        '<div class="empty">No monitoring data yet. Run a forecast first, then refresh.</div>';
+      return;
+    }
+    const drift = trigger.drift_summary || {};
+    const driftEl = document.getElementById('mon-drift-status');
+    if (drift.drift_detected) {
+      driftEl.textContent = 'DRIFT'; driftEl.className = 'stat-value danger';
+    } else {
+      driftEl.textContent = 'STABLE'; driftEl.className = 'stat-value accent';
+    }
+    document.getElementById('mon-drift-sub').textContent =
+      `${drift.drifted_features || 0}/${drift.monitored_features || 0} features drifted`;
+    document.getElementById('mon-max-psi').textContent = (drift.max_psi || 0).toFixed(4);
+    const retEl = document.getElementById('mon-retrain');
+    const retSub = document.getElementById('mon-retrain-sub');
+    if (trigger.should_retrain) {
+      retEl.textContent = 'YES'; retEl.className = 'stat-value warn';
+      retSub.textContent = 'retraining recommended';
+    } else {
+      retEl.textContent = 'NO'; retEl.className = 'stat-value accent';
+      retSub.textContent = 'model is healthy';
+    }
+    const reasons = trigger.reasons || [];
+    const content = document.getElementById('mon-trigger-content');
+    if (reasons.length === 0) {
+      content.innerHTML = `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;">
+        <span class="badge badge-ok">NO ACTION REQUIRED</span>
+        <span style="color:var(--text-dim);font-family:var(--mono);font-size:12px;">${trigger.recommended_action || 'Continue monitoring.'}</span>
+      </div>`;
+    } else {
+      content.innerHTML = `<div class="warn-box" style="margin-bottom:16px;">${trigger.recommended_action}</div>
+        <table>
+          <thead><tr><th>Rule</th><th>Condition</th><th>Severity</th><th>Value</th></tr></thead>
+          <tbody>${reasons.map(r => `<tr>
+            <td class="td-accent">${r.rule}</td>
+            <td class="td-dim" style="font-size:11px;">${r.condition}</td>
+            <td><span class="badge ${r.severity === 'critical' ? 'badge-danger' : 'badge-warn'}">${r.severity.toUpperCase()}</span></td>
+            <td>${r.value.toFixed(4)}</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+    }
+  }
+
+  async function runNarrative() {
+    const btn = document.getElementById('nar-btn');
+    btn.disabled = true; btn.textContent = 'Generating...';
+    document.getElementById('nar-loading').style.display = 'block';
+    document.getElementById('nar-error').style.display = 'none';
+    document.getElementById('nar-results').style.display = 'none';
+    try {
+      const r = await fetch(BASE + '/genai/narrative', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          template: document.getElementById('nar-template').value,
+          store_id: parseInt(document.getElementById('nar-store').value),
+          horizon_days: parseInt(document.getElementById('nar-horizon').value),
+          mean_forecast: parseFloat(document.getElementById('nar-mean').value),
+          drift_detected: document.getElementById('nar-drift').value === 'true',
+          should_retrain: document.getElementById('nar-retrain').value === 'true',
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Failed');
+      renderNarrative(data);
+    } catch(e) {
+      const el = document.getElementById('nar-error');
+      el.style.display = 'block';
+      el.innerHTML = `<div class="error-box">Error: ${e.message}</div>`;
+    } finally {
+      document.getElementById('nar-loading').style.display = 'none';
+      btn.disabled = false; btn.textContent = 'Generate';
+    }
+  }
+
+  function renderNarrative(data) {
+    document.getElementById('nar-text').textContent = data.narrative;
+    const isLive = data.model !== 'fallback' && data.model !== 'none';
+    document.getElementById('nar-model-badge').innerHTML =
+      `<span class="badge ${isLive ? 'badge-ok' : 'badge-dim'}">${data.model}</span>`;
+    document.getElementById('nar-meta').textContent =
+      `template: ${data.template_used} · version: ${data.prompt_version} · generated: ${data.generated_at}`;
+    document.getElementById('nar-meta-detail').textContent =
+      JSON.stringify({ ...data, narrative: '[see above]' }, null, 2);
+    document.getElementById('nar-results').style.display = 'block';
+  }
+
+  async function runAgent() {
+    const btn = document.getElementById('ag-btn');
+    btn.disabled = true; btn.textContent = 'Running...';
+    document.getElementById('ag-loading').style.display = 'block';
+    document.getElementById('ag-error').style.display = 'none';
+    document.getElementById('ag-results').style.display = 'none';
+    try {
+      const r = await fetch(BASE + '/agent/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store_id: parseInt(document.getElementById('ag-store').value),
+          start_date: document.getElementById('ag-date').value,
+          horizon_days: parseInt(document.getElementById('ag-horizon').value),
+          promo: parseInt(document.getElementById('ag-promo').value),
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Agent failed');
+      renderAgent(data);
+    } catch(e) {
+      const el = document.getElementById('ag-error');
+      el.style.display = 'block';
+      el.innerHTML = `<div class="error-box">Error: ${e.message}</div>`;
+    } finally {
+      document.getElementById('ag-loading').style.display = 'none';
+      btn.disabled = false; btn.textContent = 'Run Agent';
+    }
+  }
+
+  function renderAgent(data) {
+    document.getElementById('ag-plan-id').textContent = data.plan_id;
+    const statusMap = { complete: 'badge-ok', degraded: 'badge-warn', failed: 'badge-danger' };
+    document.getElementById('ag-status-badge').innerHTML =
+      `<span class="badge ${statusMap[data.status] || 'badge-dim'}">${data.status.toUpperCase()}</span>`;
+    const f = data.forecast;
+    document.getElementById('ag-replenishment').textContent =
+      Math.round(f.recommended_replenishment_units).toLocaleString();
+    document.getElementById('ag-total').textContent = Math.round(f.total_units).toLocaleString();
+    document.getElementById('ag-daily').textContent = Math.round(f.mean_daily_units).toLocaleString();
+    const mon = data.monitoring;
+    const monEl = document.getElementById('ag-monitoring');
+    const monSub = document.getElementById('ag-monitoring-sub');
+    if (!mon.available) {
+      monEl.textContent = 'N/A'; monEl.className = 'stat-value';
+      monSub.textContent = 'not available';
+    } else if (mon.should_retrain) {
+      monEl.textContent = 'RETRAIN'; monEl.className = 'stat-value warn';
+      monSub.textContent = 'retraining recommended';
+    } else {
+      monEl.textContent = 'HEALTHY'; monEl.className = 'stat-value accent';
+      monSub.textContent = 'no action needed';
+    }
+    document.getElementById('ag-narrative').textContent = data.narrative;
+    document.getElementById('ag-narrative-meta').textContent =
+      `model: ${data.narrative_model} · generated: ${data.generated_at}`;
+    const warnings = data.warnings || [];
+    if (warnings.length > 0) {
+      document.getElementById('ag-warnings-block').style.display = 'block';
+      document.getElementById('ag-warnings').innerHTML = warnings.map(w => `⚠ ${w}`).join('<br>');
+    }
+    document.getElementById('ag-reasoning').innerHTML = (data.reasoning || []).map((r, i) => `
+      <div class="reasoning-item">
+        <span class="reasoning-num">${String(i+1).padStart(2,'0')}</span>
+        <span>${r}</span>
+      </div>`).join('');
+    document.getElementById('ag-tool-calls').innerHTML = (data.tool_calls || []).map(t => `
+      <div class="tool-call">
+        <span class="tool-call-name">/${t.tool_name.replace(/_/g,'/')}</span>
+        <span class="tool-call-status">
+          <span class="badge ${t.success ? 'badge-ok' : 'badge-danger'}">${t.success ? 'OK' : 'FAIL'}</span>
+        </span>
+        <span class="tool-call-detail">${t.error || (t.success ? 'success' : 'failed')}</span>
+      </div>`).join('');
+    document.getElementById('ag-results').style.display = 'block';
+  }
+
+  async function loadMetrics() {
+    document.getElementById('met-loading').style.display = 'block';
+    try {
+      const r = await fetch(BASE + '/metrics');
+      const text = await r.text();
+      document.getElementById('met-raw').textContent = text;
+      const lines = text.split('\n');
+      const get = (name) => {
+        const line = lines.find(l => l.startsWith(name + ' '));
+        return line ? parseFloat(line.split(' ')[1]) : null;
+      };
+      const req = get('forecast_requests_total');
+      const err = get('forecast_errors_total');
+      const errRate = get('forecast_error_rate');
+      const latency = get('forecast_avg_latency_ms');
+      const meanFc = get('mean_forecast_value');
+      if (req !== null) document.getElementById('met-requests').textContent = req.toFixed(0);
+      if (err !== null) document.getElementById('met-errors').textContent = err.toFixed(0);
+      if (errRate !== null) document.getElementById('met-error-rate').textContent =
+        `error rate: ${(errRate * 100).toFixed(1)}%`;
+      if (latency !== null) document.getElementById('met-latency').textContent = latency.toFixed(0) + 'ms';
+      if (meanFc !== null) document.getElementById('met-mean-forecast').textContent =
+        Math.round(meanFc).toLocaleString();
+    } catch(e) {
+      document.getElementById('met-raw').textContent = 'Error loading metrics: ' + e.message;
+    } finally {
+      document.getElementById('met-loading').style.display = 'none';
+    }
+  }
+
+  checkHealth();
+  loadOverviewMetrics();
+  setInterval(() => {
+    if (document.querySelector('.section.active').id === 'section-overview') {
+      checkHealth();
+      loadOverviewMetrics();
+    }
+  }, 30000);
+</script>
+</body>
+</html>
