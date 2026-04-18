@@ -16,6 +16,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -80,11 +81,11 @@ class LatencyMiddleware(BaseHTTPMiddleware):
     Updates global latency counter for /metrics endpoint.
     """
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: Any) -> Response:  # type: ignore[override]
         global _total_latency_ms
 
         start_time = time.perf_counter()
-        response = await call_next(request)
+        response: Response = await call_next(request)
         elapsed_ms = (time.perf_counter() - start_time) * 1000
 
         _total_latency_ms += elapsed_ms

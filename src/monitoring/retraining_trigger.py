@@ -211,27 +211,27 @@ def evaluate_trigger(
 
     # ── Rule 4: Combined moderate signal ───────────────────────────────────
     # Moderate drift + degraded accuracy together warrant retraining
-    # even if neither individually crosses the critical threshold
+    # even if neither individually crosses the critical threshold.
+    # We assign to a local variable to satisfy mypy's type narrowing.
     moderate_drift = PSI_NO_CHANGE <= drift_report.max_psi < PSI_MODERATE
-    degraded_accuracy = (
-        forecast_report.error_stats is not None
-        and forecast_report.error_stats.mase >= MASE_WARNING_THRESHOLD
-        and forecast_report.error_stats.mase != -1.0
-    )
+    degraded_accuracy = False
 
-    if moderate_drift and degraded_accuracy and forecast_report.error is not None:
-        reason = TriggerReason(
-            rule="combined_moderate_signal",
-            condition=(
-                f"PSI={drift_report.max_psi:.4f} >= {PSI_NO_CHANGE} "
-                f"AND MASE={forecast_report.error_stats.mase:.4f} "
-                f">= {MASE_WARNING_THRESHOLD}"
-            ),
-            severity="warning",
-            value=drift_report.max_psi,
-        )
-        reasons.append(reason)
-        logger.warning(f"Rule fired: {reason.rule} — {reason.condition}")
+    if moderate_drift and forecast_report.error_stats is not None:
+        error_stats = forecast_report.error_stats  # narrowed — mypy safe
+        if error_stats.mase >= MASE_WARNING_THRESHOLD and error_stats.mase != -1.0:
+            degraded_accuracy = True
+            reason = TriggerReason(
+                rule="combined_moderate_signal",
+                condition=(
+                    f"PSI={drift_report.max_psi:.4f} >= {PSI_NO_CHANGE} "
+                    f"AND MASE={error_stats.mase:.4f} "
+                    f">= {MASE_WARNING_THRESHOLD}"
+                ),
+                severity="warning",
+                value=drift_report.max_psi,
+            )
+            reasons.append(reason)
+            logger.warning(f"Rule fired: {reason.rule} — {reason.condition}")
 
     # ── Collect non-triggering warnings ────────────────────────────────────
     warnings.extend(forecast_report.warnings)
