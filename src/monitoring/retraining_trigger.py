@@ -219,7 +219,7 @@ def evaluate_trigger(
         and forecast_report.error_stats.mase != -1.0
     )
 
-    if moderate_drift and degraded_accuracy:
+    if moderate_drift and degraded_accuracy and forecast_report.error is not None:
         reason = TriggerReason(
             rule="combined_moderate_signal",
             condition=(
