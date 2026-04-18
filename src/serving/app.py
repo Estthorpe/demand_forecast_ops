@@ -3,32 +3,35 @@
 FastAPI inference server for demand-forecast-ops.
 
 Endpoints:
-    POST /forecast                  — generate demand forecast
-    GET  /health                    — liveness check
-    GET  /ready                     — readiness check
-    GET  /metrics                   — Prometheus-compatible metrics
-    GET  /monitoring/forecast       — latest forecast health report
-    GET  /monitoring/drift          — latest drift report
-    GET  /monitoring/trigger        — latest retraining trigger decision
+    POST /forecast                   — generate demand forecast
+    GET  /health                     — liveness check
+    GET  /ready                      — readiness check
+    GET  /metrics                    — Prometheus-compatible metrics
+    GET  /monitoring/forecast        — latest forecast health report
+    GET  /monitoring/drift           — latest drift report
+    GET  /monitoring/trigger         — latest retraining trigger decision
     POST /monitoring/run-drift-check — trigger drift computation
-    POST /genai/narrative           — generate plain-language narrative
+    POST /genai/narrative            — generate plain-language narrative
+    POST /agent/run                  — run replenishment agent
 """
 
+import asyncio
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from src.agents.replenishment_agent import ReplenishmentAgent, ReplenishmentPlan
 from src.config.logging_config import configure_logging, get_logger
 from src.config.settings import settings
 from src.genai.narrative_generator import NarrativeResult, generate_narrative
@@ -55,8 +58,6 @@ from src.serving.schemas import (
     HealthResponse,
     ReadyResponse,
 )
-
-load_dotenv()
 
 configure_logging()
 logger = get_logger(__name__)
@@ -446,4 +447,65 @@ async def genai_narrative(request: dict) -> JSONResponse:  # type: ignore[type-a
         raise HTTPException(
             status_code=500,
             detail=f"Narrative generation failed: {str(e)}",
+        )
+
+
+# ── Agent endpoint ──────────────────────────────────────────────────────────
+
+
+@app.post("/agent/run")
+async def agent_run(request: dict) -> JSONResponse:  # type: ignore[type-arg]
+    """
+    Run the Replenishment Agent for a store.
+
+    Orchestrates the full workflow:
+      1. Health check
+      2. Demand forecast
+      3. Monitoring trigger check
+      4. Narrative generation
+      5. Replenishment plan
+
+    Required fields:
+      - store_id: int
+      - start_date: str (YYYY-MM-DD)
+
+    Optional fields:
+      - horizon_days: int (default 7)
+      - promo: int (default 0)
+
+    Returns a ReplenishmentPlan with full audit trail.
+    Agent never places orders — produces plan for review only.
+    """
+    try:
+        store_id = int(request.get("store_id", 1))
+        start_date = date.fromisoformat(
+            str(request.get("start_date", date.today().isoformat()))
+        )
+        horizon_days = int(request.get("horizon_days", 7))
+        promo = int(request.get("promo", 0))
+
+        agent = ReplenishmentAgent(base_url="http://localhost:8000")
+
+        # Run agent in thread executor to avoid blocking the async event loop.
+        # The agent uses synchronous httpx — calling itself from within the
+        # same server requires a separate thread to prevent deadlock on Windows.
+        loop = asyncio.get_event_loop()
+        plan: ReplenishmentPlan = await loop.run_in_executor(
+            None,
+            partial(
+                agent.run,
+                store_id=store_id,
+                start_date=start_date,
+                horizon_days=horizon_days,
+                promo=promo,
+            ),
+        )
+
+        return JSONResponse(content=plan.to_dict())
+
+    except Exception as e:
+        logger.error(f"Agent endpoint failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Agent run failed: {str(e)}",
         )
