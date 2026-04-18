@@ -92,3 +92,9 @@ pytest adds the project root automatically via pythonpath=["."]:
 scripts run directly do not get this behaviour.
 **Principle**: Always install your project in editable mode when
 running scripts that import from src/.
+## T-013: Railway Runtime DVC Pull
+Decision: DVC pull at container startup requires credentials injection at runtime.
+Railway's free tier has limitations with environment variable availability during
+container startup. Model artefacts are served correctly in local Docker environment.
+Resolution: Future fix — bake model into image at build time using Railway's
+build-time secrets, or migrate to Render.com which handles this more reliably.
