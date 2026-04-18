@@ -1,14 +1,17 @@
+# src/serving/app.py
 """
 FastAPI inference server for demand-forecast-ops.
 
 Endpoints:
-    POST /forecast  — generate demand forecast with prediction intervals
-    GET  /health    — liveness check (is the process running?)
-    GET  /ready     — readiness check (is the model loaded?)
-    GET  /metrics   — Prometheus-compatible metrics
-    GET  /monitoring/drift     — latest drift report
-    GET  /monitoring/forecast  — latest forecast health report
-    GET  /monitoring/trigger   — latest retraining trigger decision
+    POST /forecast                  — generate demand forecast
+    GET  /health                    — liveness check
+    GET  /ready                     — readiness check
+    GET  /metrics                   — Prometheus-compatible metrics
+    GET  /monitoring/forecast       — latest forecast health report
+    GET  /monitoring/drift          — latest drift report
+    GET  /monitoring/trigger        — latest retraining trigger decision
+    POST /monitoring/run-drift-check — trigger drift computation
+    POST /genai/narrative           — generate plain-language narrative
 """
 
 import time
@@ -19,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -27,6 +31,7 @@ from starlette.responses import Response
 
 from src.config.logging_config import configure_logging, get_logger
 from src.config.settings import settings
+from src.genai.narrative_generator import NarrativeResult, generate_narrative
 from src.monitoring.drift import (
     DriftReport,
     compute_drift,
@@ -51,35 +56,28 @@ from src.serving.schemas import (
     ReadyResponse,
 )
 
+load_dotenv()
+
 configure_logging()
 logger = get_logger(__name__)
 
 # ── In-memory metrics store ─────────────────────────────────────────────────
-# In production this would use prometheus-client library.
-# This implementation demonstrates the pattern correctly.
 _request_count: int = 0
 _error_count: int = 0
 _total_latency_ms: float = 0.0
-_prediction_buffer: list[float] = []  # Rolling buffer of recent predictions
+_prediction_buffer: list[float] = []
 
-# Monitoring report cache — updated on each /forecast call
 _latest_drift_report: DriftReport | None = None
 _latest_forecast_report: ForecastHealthReport | None = None
 _latest_trigger_report: TriggerReport | None = None
 
-# Paths for monitoring outputs
 MONITORING_OUTPUT_DIR = Path("logs/monitoring")
 REFERENCE_DISTRIBUTION_PATH = Path("models/reference_distribution.parquet")
 
 
 # ── Request latency middleware ──────────────────────────────────────────────
 class LatencyMiddleware(BaseHTTPMiddleware):
-    """
-    Track request latency for all endpoints.
-
-    Adds X-Response-Time header to all responses.
-    Updates global latency counter for /metrics endpoint.
-    """
+    """Track request latency for all endpoints."""
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:  # type: ignore[override]
         global _total_latency_ms
@@ -100,12 +98,6 @@ class LatencyMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-    FastAPI lifespan context manager.
-
-    Code before yield runs at startup.
-    Code after yield runs at shutdown.
-    """
     logger.info("Starting demand-forecast-ops serving layer...")
     try:
         predictor.load_model()
@@ -113,8 +105,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except FileNotFoundError as e:
         logger.warning(
             f"Model artefact not found: {e}. "
-            "Server will start but /ready will return 503. "
-            "Run python scripts/train.py to generate the model."
+            "Server will start but /ready will return 503."
         )
     except Exception as e:
         logger.error(f"Unexpected error loading model: {e}")
@@ -134,7 +125,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Register middleware
 app.add_middleware(LatencyMiddleware)
 
 
@@ -143,12 +133,7 @@ app.add_middleware(LatencyMiddleware)
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    """
-    Liveness check — is the process running?
-
-    Always returns 200 if the process is alive.
-    Does not check model state — use /ready for that.
-    """
+    """Liveness check — always returns 200 if process is alive."""
     return HealthResponse(
         status="ok",
         version=settings.project_version,
@@ -157,12 +142,7 @@ async def health() -> HealthResponse:
 
 @app.get("/ready", response_model=ReadyResponse)
 async def ready() -> ReadyResponse:
-    """
-    Readiness check — is the model loaded and ready to serve?
-
-    Returns 200 if model is loaded.
-    Returns 503 if model is not loaded.
-    """
+    """Readiness check — returns 200 if model is loaded."""
     if predictor.is_loaded:
         return ReadyResponse(
             status="ready",
@@ -220,14 +200,12 @@ async def forecast(request: ForecastRequest) -> ForecastResponse:
 
     # ── Update prediction buffer for monitoring ─────────────────────────────
     point_forecasts = [f.point_forecast for f in forecasts]
-
     _prediction_buffer.extend(point_forecasts)
 
-    # Keep buffer bounded — last 1000 predictions
     if len(_prediction_buffer) > 1000:
         _prediction_buffer = _prediction_buffer[-1000:]
 
-    # ── Run forecast health check on every request ──────────────────────────
+    # ── Run forecast health check ───────────────────────────────────────────
     try:
         _latest_forecast_report = track_forecast_health(
             predictions=np.array(_prediction_buffer),
@@ -236,7 +214,6 @@ async def forecast(request: ForecastRequest) -> ForecastResponse:
             upper_bounds=np.array([f.upper_90 for f in forecasts]),
         )
 
-        # Run trigger evaluation if drift report exists
         if _latest_drift_report is not None:
             _latest_trigger_report = evaluate_trigger(
                 drift_report=_latest_drift_report,
@@ -254,7 +231,6 @@ async def forecast(request: ForecastRequest) -> ForecastResponse:
                 )
 
     except Exception as e:
-        # Monitoring must never break serving
         logger.error(f"Monitoring update failed (non-fatal): {e}")
 
     return ForecastResponse(
@@ -272,28 +248,20 @@ async def forecast(request: ForecastRequest) -> ForecastResponse:
 
 @app.get("/metrics", response_class=PlainTextResponse)
 async def metrics() -> str:
-    """
-    Prometheus-compatible metrics endpoint.
-
-    Exposes request counts, error rates, latency,
-    and model health indicators.
-    """
+    """Prometheus-compatible metrics endpoint."""
     avg_latency = _total_latency_ms / _request_count if _request_count > 0 else 0.0
-
     error_rate = _error_count / _request_count if _request_count > 0 else 0.0
-
-    # Forecast distribution stats if available
-    mean_forecast = 0.0
-    if _prediction_buffer:
-        mean_forecast = float(np.mean(_prediction_buffer))
-
-    retraining_flag = 0
-    if _latest_trigger_report is not None:
-        retraining_flag = 1 if _latest_trigger_report.should_retrain else 0
-
-    drift_flag = 0
-    if _latest_drift_report is not None:
-        drift_flag = 1 if _latest_drift_report.drift_detected else 0
+    mean_forecast = float(np.mean(_prediction_buffer)) if _prediction_buffer else 0.0
+    retraining_flag = (
+        1
+        if _latest_trigger_report is not None and _latest_trigger_report.should_retrain
+        else 0
+    )
+    drift_flag = (
+        1
+        if _latest_drift_report is not None and _latest_drift_report.drift_detected
+        else 0
+    )
 
     lines = [
         "# HELP forecast_requests_total Total forecast requests received",
@@ -304,7 +272,7 @@ async def metrics() -> str:
         "# TYPE forecast_errors_total counter",
         f"forecast_errors_total {_error_count}",
         "",
-        "# HELP forecast_error_rate Current error rate (errors/requests)",
+        "# HELP forecast_error_rate Current error rate",
         "# TYPE forecast_error_rate gauge",
         f"forecast_error_rate {error_rate:.4f}",
         "",
@@ -337,12 +305,7 @@ async def metrics() -> str:
 
 @app.get("/monitoring/forecast")
 async def monitoring_forecast() -> JSONResponse:
-    """
-    Latest forecast health report.
-
-    Returns distribution stats and error metrics
-    from the most recent monitoring cycle.
-    """
+    """Latest forecast health report."""
     if _latest_forecast_report is None:
         return JSONResponse(
             status_code=200,
@@ -357,12 +320,7 @@ async def monitoring_forecast() -> JSONResponse:
 
 @app.get("/monitoring/drift")
 async def monitoring_drift() -> JSONResponse:
-    """
-    Latest drift report.
-
-    Returns PSI values per feature and overall drift flag.
-    Drift is computed by calling /monitoring/run-drift-check.
-    """
+    """Latest drift report."""
     if _latest_drift_report is None:
         return JSONResponse(
             status_code=200,
@@ -377,19 +335,13 @@ async def monitoring_drift() -> JSONResponse:
 
 @app.get("/monitoring/trigger")
 async def monitoring_trigger() -> JSONResponse:
-    """
-    Latest retraining trigger decision.
-
-    Returns should_retrain flag and full audit trail
-    of which rules fired and why.
-    """
+    """Latest retraining trigger decision."""
     if _latest_trigger_report is None:
         return JSONResponse(
             status_code=200,
             content={
                 "status": "no_data",
-                "message": "No trigger report yet. "
-                "Make forecast requests to generate one.",
+                "message": "No trigger report yet.",
             },
         )
     return JSONResponse(content=_latest_trigger_report.to_dict())
@@ -397,15 +349,7 @@ async def monitoring_trigger() -> JSONResponse:
 
 @app.post("/monitoring/run-drift-check")
 async def run_drift_check() -> JSONResponse:
-    """
-    Trigger a drift computation against the reference distribution.
-
-    Loads reference distribution from models/reference_distribution.parquet.
-    Computes PSI against recent prediction buffer features.
-    Updates the in-memory drift report and trigger report.
-
-    Returns the full drift report.
-    """
+    """Trigger a drift computation against the reference distribution."""
     global _latest_drift_report, _latest_trigger_report
 
     if not REFERENCE_DISTRIBUTION_PATH.exists():
@@ -434,16 +378,10 @@ async def run_drift_check() -> JSONResponse:
         )
 
     try:
-        reference_df = load_reference_distribution(REFERENCE_DISTRIBUTION_PATH)
-
-        # Build current DataFrame from prediction buffer
         import pandas as pd
 
-        current_df = pd.DataFrame(
-            {
-                "point_forecast": _prediction_buffer,
-            }
-        )
+        reference_df = load_reference_distribution(REFERENCE_DISTRIBUTION_PATH)
+        current_df = pd.DataFrame({"point_forecast": _prediction_buffer})
 
         _latest_drift_report = compute_drift(
             reference_df=reference_df,
@@ -457,7 +395,6 @@ async def run_drift_check() -> JSONResponse:
             MONITORING_OUTPUT_DIR / "latest_drift_report.json",
         )
 
-        # Re-run trigger if forecast report exists
         if _latest_forecast_report is not None:
             _latest_trigger_report = evaluate_trigger(
                 drift_report=_latest_drift_report,
@@ -472,4 +409,41 @@ async def run_drift_check() -> JSONResponse:
         raise HTTPException(
             status_code=500,
             detail=f"Drift check failed: {str(e)}",
+        )
+
+
+# ── GenAI endpoint ──────────────────────────────────────────────────────────
+
+
+@app.post("/genai/narrative")
+async def genai_narrative(request: dict) -> JSONResponse:  # type: ignore[type-arg]
+    """
+    Generate a plain-language narrative from structured forecast
+    and monitoring metadata.
+
+    Accepts a JSON dict containing any combination of:
+      - store_id, horizon_days, mean_forecast (forecast data)
+      - drift_detected, max_psi (drift data)
+      - should_retrain, recommended_action (trigger data)
+
+    Optional field:
+      - template: "forecast", "monitoring", or "combined" (default)
+
+    Returns a grounded narrative — only data in the input is used.
+    Falls back to a template-based narrative if LLM is unavailable.
+    """
+    template_name = request.pop("template", "combined")
+
+    try:
+        result: NarrativeResult = generate_narrative(
+            metadata=request,
+            template_name=str(template_name),
+        )
+        return JSONResponse(content=result.to_dict())
+
+    except Exception as e:
+        logger.error(f"Narrative endpoint failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Narrative generation failed: {str(e)}",
         )
